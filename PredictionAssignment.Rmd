@@ -1,14 +1,15 @@
 ---
-title: "Practical Machine Learning: Prediction Assignment"
-subtitle: "Oli Bailey 30/07/2020"
+title: 'Practical Machine Learning: Prediction Assignment'
+subtitle: Oli Bailey 30/07/2020
 output:
-   html_document:
-     theme: united
-     highlight: tango
-     fig_width: 8
-     fig_height: 4
-     fig_caption: false
-     number-sections: true
+  html_document:
+    theme: united
+    highlight: tango
+    fig_width: 8
+    fig_height: 4
+    fig_caption: no
+    number-sections: yes
+  pdf_document: default
 ---
 <style type="text/css">
 h1.title {
@@ -28,10 +29,16 @@ h3.subtitle {
 
 <center>![](curl.png)</center>
 
+```{r setup, include = FALSE}
+library(knitr)
+#knitr::opts_chunk$set(eval = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+```
+
 ```{r, load_libs, echo=FALSE, warning=FALSE,message=FALSE}
 library(caret) # for the models
 library(tidyverse) # for data wrangling
-
+library(klaR) # for Naive Bayes classifier
 ```
 
 
@@ -119,7 +126,7 @@ train_control<- trainControl(method="cv", number=4)
 
 ### Feature Selection
 The data has nearly 160 features which we can use to train our classifiers. This is very likely to be many more than are needed. To reduce this number, we'll start by looking at how many missing values each feature has:
-```{r echo=FALSE, missing_values, warning=FALSE}
+```{r, missing_values, echo=FALSE}
 sapply(training, FUN=function(x) { sum(is.na(x))}) -> NAs_by_column
 
 names(NAs_by_column[NAs_by_column>0]) -> NA_cols
@@ -132,13 +139,17 @@ cat("\nThere are ",length(NA_cols)," columns with missing data\n\n")
 cat("The average number of missing values per column is ",mean(NAs_by_column[NAs_by_column>0]))
 ```
 
+
 So we have 100 columns that have 13444 out of 13737 missing values. It is safe to say that we can remove these from our models, leaving a more manageable set of 60 or so features.
 
 The vast majority of features are numeric (i.e. accelerometer and gyro readings), with only a handful of character classes that may need converting to factors. 
 
 
+### Ignoring Username,Timestamps and 'window' Features
+Column 1 'X1' is just a row index so we'll omit this!
+ 
+Column 2 is the participants names for that particular set of observed sensor data. We really don't want them to be included in the regression, so we'll omit this column!
 
-### Ignoring Timestamps and 'window' Features
 Columns 3 to 5 are time-stamp columns `r names(training[3:5])` which we don't want to train on, as the time-stamps are irrelevant and misleading when we come to use the model *at some other future time*!
 
 Columns 6 and 7 ('new_window' and 'num_window') seem to be unrelated to the measurement data, as 'num_window' just seems to be a counting variable, so we shall omit these two columns as well.
@@ -147,18 +158,18 @@ Columns 6 and 7 ('new_window' and 'num_window') seem to be unrelated to the meas
 We'll take the approach of using a single model using a random forest classifier (method = "rf" in R), using the "classe" feature as the target variable for prediction.
 ```{r, cache=TRUE, model_selection, warning=FALSE, message=FALSE}
 # Remove features with missing values:
-training %>% select(-all_of(NA_cols)) -> training_no_NA
+training %>% dplyr::select(-all_of(NA_cols)) -> training_no_NA
 
 # Check no missing values
 sum(is.na(training_no_NA))
 
 # train the models (this may take a few minutes...)
 system.time(rfmodel_1 <- train(classe ~ ., 
-                 data=training_no_NA[,-c(3:7)],
+                 data=training_no_NA[,-c(1:7)],
                  trControl=train_control, 
                  method="rf"))
 ```
-Our training took about four minutes.
+Our training took about 7 minutes.
 
 ### Assess the Model on the Test Data
 Now we'll test the model on the 30% test set that we created, and get an assessment of out-of-sample errors:
@@ -168,7 +179,7 @@ rfpred <- predict(rfmodel_1, testing)
 
 confusionMatrix(rfpred, testing$classe)
 ```
-Amazingly, the Random Forest classifier has performed with 100% accuracy on the 5,885 observations in the test set! This gives us confidence that the predictor will perform well on any new unseen data.
+Amazingly, the Random Forest classifier has performed with 99.2% accuracy on the 5,885 observations in the test set! This gives us confidence that the predictor will perform well on any new unseen data. with perhaps 1% error or so.
 
 ### Feature Reduction Using PCA
 In the model above, we trained the classifier on just under 60 features (i.e.dimensions), but many of these are likely to show very high correlation with each other and the target, so we'll use Principal Components Analysis to reduce this number of dimensions. PCA in Caret forces data be centered and scaled, so we don't need to explicitly do this.
@@ -176,7 +187,7 @@ In the model above, we trained the classifier on just under 60 features (i.e.dim
 We'll also remove features that have very little variation by using Caret's "nzv", or 'near zero variance' pre-processing function as well.
 ```{r, model_with_PCA, cache=TRUE, warning=FALSE}
 # pre-processing data frame - omitting time column 3:5, and target column 60, "classe":
-df <- training_no_NA[,-c(3:5,60)]
+df <- training_no_NA[,-c(1:7,60)]
 
 # PCA object to use on train AND test sets with same axes rotations
 #pca <- prcomp(df, scale = T, center = T)
@@ -200,7 +211,7 @@ system.time(rfmodel_pca <- train(classe ~ .,
  
 ```
 
-We see that PCA has roughly halved the number of features required, whilst still capturing 95% of the variance in the data. The hope was that this will help reduce the training time of our chosen classifier, but surprisingly, we see it actually increased from 244 to 262 seconds!
+We see that PCA has roughly halved the number of features required, whilst still capturing 95% of the variance in the data. The hope was that this will help reduce the training time of our chosen classifier, and we do see it actually decreased from about 7 minutes to only 3.5 minutes.
 
 ### Re-assess Model with PCA on the Test data
 ```{r, assess2, warning=FALSE}
@@ -212,14 +223,14 @@ rfpred_pca <- predict(rfmodel_pca, preproc_testing)
 confusionMatrix(rfpred_pca, preproc_testing$classe)
 ```
 
-Perhaps not unsurprisingly, the classifier makes a few errors on the test set, reducing accuracy from 100% to 98.81%, as PCA does sacrifice some "detail" or variation in the data as the cost of reducing the number of dimensions. 
+Perhaps not unsurprisingly, the classifier makes a few errors on the test set, reducing accuracy from 99.2% to 97.54%, as PCA does sacrifice some "detail" or variation in the data as the cost of reducing the number of dimensions. 
 
 ## Comparison with (Simpler) Decision Tree
 Above we have used a Random Forest classifier with and without PCA. Random Forest classifiers are good at handling non-linearities in data. For interest, we'll do a quick comparison with a basic decision tree classifier using method="rpart":
 ```{r, ridge, cache=TRUE, warning=FALSE}
 # train the models (this may take a few minutes...)
 system.time(rfmodel_rpart <- train(classe ~ ., 
-                 data=training_no_NA[,-c(3:7)],
+                 data=training_no_NA[,-c(1:7)],
                  trControl=train_control, 
                 method = "rpart"))
 ```
@@ -228,7 +239,7 @@ rfpred <- predict(rfmodel_rpart, testing)
 c <- confusionMatrix(rfpred, testing$classe)
 c$overall
 ```
-We see this trains *very* quickly, in a couple of seconds, but has a **terrible** accuracy of about 66%. We will not use a basic model such as this for our final model.
+We see this trains *very* quickly, in a few  seconds, but has a **terrible** accuracy of about 66%. We will not use a basic model such as this for our final model.
 
 ## Final Model Choice & Prediction
 In light of the training time increase and loss in accuracy, we'll pick the initial Random Forest model without PCA as our final model to use on the "prediction test" set for this assignment.
@@ -240,9 +251,7 @@ In the file "pml-testing.csv", we are provided 20 test cases on which to make pr
 rfpred <- predict(rfmodel_1, prediction_test)
 rfpred
 ```
-Our classifier thinks all 20 exercises in the final prediction test set are of Class A, i.e. exercise performed correctly.
-
-Save these predictions to file:
+We'll save these predictions on the 20 test cases to file:
 ```{r}
 write_csv(x=data.frame(Prediction=rfpred),path="final_predictions.csv")
 ```
