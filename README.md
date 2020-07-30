@@ -1,6 +1,8 @@
 # PracticalMachineLearning
 Final Assignment Week 4: Dumb-bell exercise prediction.
 
+[](attenion.png)
+
 ** Please refer to gh-pages branch, or browse to
 
 [http://www.threefeetdeep.co.uk/PracticalMachineLearning/PredictionAssignment.html](http://www.threefeetdeep.co.uk/PracticalMachineLearning/PredictionAssignment.html) 
