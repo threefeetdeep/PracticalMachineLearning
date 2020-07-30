@@ -558,8 +558,10 @@ h3.subtitle {
 <p>So we have 100 columns that have 13444 out of 13737 missing values. It is safe to say that we can remove these from our models, leaving a more manageable set of 60 or so features.</p>
 <p>The vast majority of features are numeric (i.e. accelerometer and gyro readings), with only a handful of character classes that may need converting to factors.</p>
 </div>
-<div id="ignoring-timestamps-and-window-features" class="section level3">
-<h3>Ignoring timestamps and ‘window’ features</h3>
+<div id="ignoring-usernametimestamps-and-window-features" class="section level3">
+<h3>Ignoring Username,Timestamps and ‘window’ Features</h3>
+<p>Column 1 ‘X1’ is just a row index so we’ll omit this!</p>
+<p>Column 2 is the participants names for that particular set of observed sensor data. We really don’t want them to be included in the regression, so we’ll omit this column!</p>
 <p>Columns 3 to 5 are time-stamp columns raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp which we don’t want to train on, as the time-stamps are irrelevant and misleading when we come to use the model <em>at some other future time</em>!</p>
 <p>Columns 6 and 7 (‘new_window’ and ‘num_window’) seem to be unrelated to the measurement data, as ‘num_window’ just seems to be a counting variable, so we shall omit these two columns as well.</p>
 </div>
@@ -568,19 +570,19 @@ h3.subtitle {
 <h2>Model Selection</h2>
 <p>We’ll take the approach of using a single model using a random forest classifier (method = “rf” in R), using the “classe” feature as the target variable for prediction.</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="co"># Remove features with missing values:</span></span>
-<span id="cb11-2"><a href="#cb11-2"></a>training <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">select</span>(<span class="op">-</span><span class="kw">all_of</span>(NA_cols)) -&gt;<span class="st"> </span>training_no_NA</span>
+<span id="cb11-2"><a href="#cb11-2"></a>training <span class="op">%&gt;%</span><span class="st"> </span>dplyr<span class="op">::</span><span class="kw">select</span>(<span class="op">-</span><span class="kw">all_of</span>(NA_cols)) -&gt;<span class="st"> </span>training_no_NA</span>
 <span id="cb11-3"><a href="#cb11-3"></a></span>
 <span id="cb11-4"><a href="#cb11-4"></a><span class="co"># Check no missing values</span></span>
 <span id="cb11-5"><a href="#cb11-5"></a><span class="kw">sum</span>(<span class="kw">is.na</span>(training_no_NA))</span></code></pre></div>
 <pre><code>## [1] 0</code></pre>
 <div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="co"># train the models (this may take a few minutes...)</span></span>
 <span id="cb13-2"><a href="#cb13-2"></a><span class="kw">system.time</span>(rfmodel_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">train</span>(classe <span class="op">~</span><span class="st"> </span>., </span>
-<span id="cb13-3"><a href="#cb13-3"></a>                 <span class="dt">data=</span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">3</span><span class="op">:</span><span class="dv">7</span>)],</span>
+<span id="cb13-3"><a href="#cb13-3"></a>                 <span class="dt">data=</span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">7</span>)],</span>
 <span id="cb13-4"><a href="#cb13-4"></a>                 <span class="dt">trControl=</span>train_control, </span>
 <span id="cb13-5"><a href="#cb13-5"></a>                 <span class="dt">method=</span><span class="st">&quot;rf&quot;</span>))</span></code></pre></div>
 <pre><code>##    user  system elapsed 
-##  222.36    2.80  226.04</code></pre>
-<p>Our training took about four minutes.</p>
+##  394.00    3.36  400.56</code></pre>
+<p>Our training took about 7 minutes.</p>
 <div id="assess-the-model-on-the-test-data" class="section level3">
 <h3>Assess the Model on the Test Data</h3>
 <p>Now we’ll test the model on the 30% test set that we created, and get an assessment of out-of-sample errors:</p>
@@ -591,42 +593,42 @@ h3.subtitle {
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1674    0    0    0    0
-##          B    0 1139    0    0    0
-##          C    0    0 1026    0    0
-##          D    0    0    0  964    0
-##          E    0    0    0    0 1082
+##          A 1672    3    0    0    0
+##          B    1 1134    9    0    0
+##          C    1    2 1016   25    0
+##          D    0    0    1  938    4
+##          E    0    0    0    1 1078
 ## 
 ## Overall Statistics
-##                                      
-##                Accuracy : 1          
-##                  95% CI : (0.9994, 1)
-##     No Information Rate : 0.2845     
-##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16  
-##                                      
-##                   Kappa : 1          
-##                                      
-##  Mcnemar&#39;s Test P-Value : NA         
+##                                           
+##                Accuracy : 0.992           
+##                  95% CI : (0.9894, 0.9941)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9899          
+##                                           
+##  Mcnemar&#39;s Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Specificity            1.0000   1.0000   1.0000   1.0000   1.0000
-## Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
-## Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
+## Sensitivity            0.9988   0.9956   0.9903   0.9730   0.9963
+## Specificity            0.9993   0.9979   0.9942   0.9990   0.9998
+## Pos Pred Value         0.9982   0.9913   0.9732   0.9947   0.9991
+## Neg Pred Value         0.9995   0.9989   0.9979   0.9947   0.9992
 ## Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
-## Detection Rate         0.2845   0.1935   0.1743   0.1638   0.1839
-## Detection Prevalence   0.2845   0.1935   0.1743   0.1638   0.1839
-## Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000</code></pre>
-<p>Amazingly, the Random Forest classifier has performed with 100% accuracy on the 5,885 observations in the test set! This gives us confidence that the predictor will perform well on any new unseen data.</p>
+## Detection Rate         0.2841   0.1927   0.1726   0.1594   0.1832
+## Detection Prevalence   0.2846   0.1944   0.1774   0.1602   0.1833
+## Balanced Accuracy      0.9990   0.9968   0.9922   0.9860   0.9980</code></pre>
+<p>Amazingly, the Random Forest classifier has performed with 99.2% accuracy on the 5,885 observations in the test set! This gives us confidence that the predictor will perform well on any new unseen data. with perhaps 1% error or so.</p>
 </div>
 <div id="feature-reduction-using-pca" class="section level3">
 <h3>Feature Reduction Using PCA</h3>
 <p>In the model above, we trained the classifier on just under 60 features (i.e.dimensions), but many of these are likely to show very high correlation with each other and the target, so we’ll use Principal Components Analysis to reduce this number of dimensions. PCA in Caret forces data be centered and scaled, so we don’t need to explicitly do this.</p>
 <p>We’ll also remove features that have very little variation by using Caret’s “nzv”, or ‘near zero variance’ pre-processing function as well.</p>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="co"># pre-processing data frame - omitting time column 3:5, and target column 60, &quot;classe&quot;:</span></span>
-<span id="cb17-2"><a href="#cb17-2"></a>df &lt;-<span class="st"> </span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">3</span><span class="op">:</span><span class="dv">5</span>,<span class="dv">60</span>)]</span>
+<span id="cb17-2"><a href="#cb17-2"></a>df &lt;-<span class="st"> </span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">7</span>,<span class="dv">60</span>)]</span>
 <span id="cb17-3"><a href="#cb17-3"></a></span>
 <span id="cb17-4"><a href="#cb17-4"></a><span class="co"># PCA object to use on train AND test sets with same axes rotations</span></span>
 <span id="cb17-5"><a href="#cb17-5"></a><span class="co">#pca &lt;- prcomp(df, scale = T, center = T)</span></span>
@@ -635,15 +637,15 @@ h3.subtitle {
 <span id="cb17-8"><a href="#cb17-8"></a></span>
 <span id="cb17-9"><a href="#cb17-9"></a><span class="co"># View pre-processing stage:</span></span>
 <span id="cb17-10"><a href="#cb17-10"></a>myPreProc</span></code></pre></div>
-<pre><code>## Created from 13737 samples and 56 variables
+<pre><code>## Created from 13737 samples and 52 variables
 ## 
 ## Pre-processing:
-##   - centered (54)
-##   - ignored (2)
-##   - principal component signal extraction (54)
-##   - scaled (54)
+##   - centered (52)
+##   - ignored (0)
+##   - principal component signal extraction (52)
+##   - scaled (52)
 ## 
-## PCA needed 28 components to capture 95 percent of the variance</code></pre>
+## PCA needed 26 components to capture 95 percent of the variance</code></pre>
 <div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a><span class="co"># Perform pre-processing:</span></span>
 <span id="cb19-2"><a href="#cb19-2"></a></span>
 <span id="cb19-3"><a href="#cb19-3"></a>preTrain &lt;-<span class="st"> </span><span class="kw">predict</span>(myPreProc, df)</span>
@@ -656,11 +658,11 @@ h3.subtitle {
 <span id="cb19-10"><a href="#cb19-10"></a>                 )</span>
 <span id="cb19-11"><a href="#cb19-11"></a>)</span></code></pre></div>
 <pre><code>##    user  system elapsed 
-##  239.24    2.43  242.92</code></pre>
-<p>We see that PCA has roughly halved the number of features required, whilst still capturing 95% of the variance in the data. The hope was that this will help reduce the training time of our chosen classifier, but surprisingly, we see it actually increased from 244 to 262 seconds!</p>
+##  227.08    2.45  232.11</code></pre>
+<p>We see that PCA has roughly halved the number of features required, whilst still capturing 95% of the variance in the data. The hope was that this will help reduce the training time of our chosen classifier, and we do see it actually decreased from about 7 minutes to only 3.5 minutes.</p>
 </div>
 <div id="re-assess-model-with-pca-on-the-test-data" class="section level3">
-<h3>Re-assess model with PCA on the Test data</h3>
+<h3>Re-assess Model with PCA on the Test data</h3>
 <div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1"></a><span class="co"># Perform same PCA process on testing data before predicting on it</span></span>
 <span id="cb21-2"><a href="#cb21-2"></a>preproc_testing &lt;-<span class="st"> </span><span class="kw">predict</span>(myPreProc, testing)</span>
 <span id="cb21-3"><a href="#cb21-3"></a></span>
@@ -671,35 +673,35 @@ h3.subtitle {
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1673    7    0    0    0
-##          B    0 1125   18    0    1
-##          C    0    7 1005   28    1
-##          D    0    0    2  933    1
-##          E    1    0    1    3 1079
+##          A 1661   17    1    1    0
+##          B    4 1106   23    1    3
+##          C    6   14  990   47    7
+##          D    2    0    5  914    3
+##          E    1    2    7    1 1069
 ## 
 ## Overall Statistics
-##                                          
-##                Accuracy : 0.9881         
-##                  95% CI : (0.985, 0.9907)
-##     No Information Rate : 0.2845         
-##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16      
-##                                          
-##                   Kappa : 0.985          
-##                                          
-##  Mcnemar&#39;s Test P-Value : NA             
+##                                           
+##                Accuracy : 0.9754          
+##                  95% CI : (0.9711, 0.9792)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9688          
+##                                           
+##  Mcnemar&#39;s Test P-Value : 1.561e-07       
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9994   0.9877   0.9795   0.9678   0.9972
-## Specificity            0.9983   0.9960   0.9926   0.9994   0.9990
-## Pos Pred Value         0.9958   0.9834   0.9654   0.9968   0.9954
-## Neg Pred Value         0.9998   0.9970   0.9957   0.9937   0.9994
+## Sensitivity            0.9922   0.9710   0.9649   0.9481   0.9880
+## Specificity            0.9955   0.9935   0.9848   0.9980   0.9977
+## Pos Pred Value         0.9887   0.9727   0.9305   0.9892   0.9898
+## Neg Pred Value         0.9969   0.9930   0.9925   0.9899   0.9973
 ## Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
-## Detection Rate         0.2843   0.1912   0.1708   0.1585   0.1833
-## Detection Prevalence   0.2855   0.1944   0.1769   0.1590   0.1842
-## Balanced Accuracy      0.9989   0.9919   0.9861   0.9836   0.9981</code></pre>
-<p>Perhaps not unsurprisingly, the classifier makes a few errors on the test set, reducing accuracy from 100% to 98.81%, as PCA does sacrifice some “detail” or variation in the data as the cost of reducing the number of dimensions.</p>
+## Detection Rate         0.2822   0.1879   0.1682   0.1553   0.1816
+## Detection Prevalence   0.2855   0.1932   0.1808   0.1570   0.1835
+## Balanced Accuracy      0.9939   0.9822   0.9748   0.9731   0.9928</code></pre>
+<p>Perhaps not unsurprisingly, the classifier makes a few errors on the test set, reducing accuracy from 99.2% to 97.54%, as PCA does sacrifice some “detail” or variation in the data as the cost of reducing the number of dimensions.</p>
 </div>
 </div>
 <div id="comparison-with-simpler-decision-tree" class="section level2">
@@ -707,19 +709,19 @@ h3.subtitle {
 <p>Above we have used a Random Forest classifier with and without PCA. Random Forest classifiers are good at handling non-linearities in data. For interest, we’ll do a quick comparison with a basic decision tree classifier using method=“rpart”:</p>
 <div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1"></a><span class="co"># train the models (this may take a few minutes...)</span></span>
 <span id="cb23-2"><a href="#cb23-2"></a><span class="kw">system.time</span>(rfmodel_rpart &lt;-<span class="st"> </span><span class="kw">train</span>(classe <span class="op">~</span><span class="st"> </span>., </span>
-<span id="cb23-3"><a href="#cb23-3"></a>                 <span class="dt">data=</span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">3</span><span class="op">:</span><span class="dv">7</span>)],</span>
+<span id="cb23-3"><a href="#cb23-3"></a>                 <span class="dt">data=</span>training_no_NA[,<span class="op">-</span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">7</span>)],</span>
 <span id="cb23-4"><a href="#cb23-4"></a>                 <span class="dt">trControl=</span>train_control, </span>
 <span id="cb23-5"><a href="#cb23-5"></a>                <span class="dt">method =</span> <span class="st">&quot;rpart&quot;</span>))</span></code></pre></div>
 <pre><code>##    user  system elapsed 
-##    1.92    0.11    2.04</code></pre>
+##    5.19    0.07    5.28</code></pre>
 <div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1"></a>rfpred &lt;-<span class="st"> </span><span class="kw">predict</span>(rfmodel_rpart, testing)</span>
 <span id="cb25-2"><a href="#cb25-2"></a>c &lt;-<span class="st"> </span><span class="kw">confusionMatrix</span>(rfpred, testing<span class="op">$</span>classe)</span>
 <span id="cb25-3"><a href="#cb25-3"></a>c<span class="op">$</span>overall</span></code></pre></div>
 <pre><code>##       Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
-##      0.6618522      0.5695969      0.6496025      0.6739412      0.2844520 
+##   5.514019e-01   4.375053e-01   5.385872e-01   5.641655e-01   2.844520e-01 
 ## AccuracyPValue  McnemarPValue 
-##      0.0000000            NaN</code></pre>
-<p>We see this trains <em>very</em> quickly, in a couple of seconds, but has a <strong>terrible</strong> accuracy of about 66%. We will not use a basic model such as this for our final model.</p>
+##   0.000000e+00  8.688574e-254</code></pre>
+<p>We see this trains <em>very</em> quickly, in a few seconds, but has a <strong>terrible</strong> accuracy of about 66%. We will not use a basic model such as this for our final model.</p>
 </div>
 <div id="final-model-choice-prediction" class="section level2">
 <h2>Final Model Choice &amp; Prediction</h2>
@@ -730,10 +732,9 @@ h3.subtitle {
 <p>In the file “pml-testing.csv”, we are provided 20 test cases on which to make predictions. We’ll use our ‘rfmodel_1’ to make the predictions.</p>
 <div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1"></a>rfpred &lt;-<span class="st"> </span><span class="kw">predict</span>(rfmodel_<span class="dv">1</span>, prediction_test)</span>
 <span id="cb27-2"><a href="#cb27-2"></a>rfpred</span></code></pre></div>
-<pre><code>##  [1] A A A A A A A A A A A A A A A A A A A A
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
 ## Levels: A B C D E</code></pre>
-<p>Our classifier thinks all 20 exercises in the final prediction test set are of Class A, i.e. exercise performed correctly.</p>
-<p>Save these prediction to file:</p>
+<p>We’ll save these predictions on the 20 test cases to file:</p>
 <div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1"></a><span class="kw">write_csv</span>(<span class="dt">x=</span><span class="kw">data.frame</span>(<span class="dt">Prediction=</span>rfpred),<span class="dt">path=</span><span class="st">&quot;final_predictions.csv&quot;</span>)</span></code></pre></div>
 <center>
 <strong>END OF REPORT</strong>
