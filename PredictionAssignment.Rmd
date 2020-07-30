@@ -1,0 +1,250 @@
+---
+title: "Practical Machine Learning: Prediction Assignment"
+subtitle: "Oli Bailey 30/07/2020"
+output:
+   html_document:
+     theme: united
+     highlight: tango
+     fig_width: 8
+     fig_height: 4
+     fig_caption: false
+     number-sections: true
+---
+<style type="text/css">
+h1.title {
+  font-size: 32px;
+  color: DarkBlue;
+  font-weight: bold;
+  text-align: center;
+}
+
+h3.subtitle {
+  font-size: 20px;
+  color: DarkBlue;
+  text-align: center;
+}
+
+</style>
+
+<center>![](curl.png)</center>
+
+```{r, load_libs, echo=FALSE, warning=FALSE,message=FALSE}
+library(caret) # for the models
+library(tidyverse) # for data wrangling
+
+```
+
+
+## Dumb-Bell Curl Exercise Prediction
+Health and fitness monitoring devices (e.g. Fitbit, Jawbone), and associated apps (e.g. Strava, MapMyRun)are in widespread use by people who want to monitor and improve their own fitness and health. One thing that people regularly do is quantify how ***much*** of a particular activity they do, but they rarely quantify how ***well*** they do it.
+
+In this project, we look at making a prediction to classify the "quality" of a unilateral dumb-bell curl exercise into five different categories, using data from accelerometers on the weightlifters belt, forearm, arm, and dumb-bell itself. The categories of exercise are:
+
+* Class A: performing exercise correctly
+* Class D: throwing the elbows to the front
+* Class C: lifting the dumbbell only halfway
+* Class D: lowering the dumbbell only halfway 
+* Class E: throwing the hips to the front 
+
+In this study, we have data from 6 participants. They were asked to perform barbell lifts correctly and also incorrectly in 5 different ways (above).
+
+More information is available from the website [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)  - see the section on the Weight Lifting Exercise Dataset.
+
+The accelerometer sensors are organized as shown in the image below:
+
+<center>![](sensors.png)</center>
+
+## Project Overview
+This report  will briefly discuss the steps taken to generate a final model capable of predicting the type of barbell exercise being performed, and also classify this exercise as being correctly or incorrectly performed (i.e. technique).
+
+To do this, we will:
+
+* Perform an Initial Data Analysis to understand the data and identify key features
+* Generate models to predict exercise type and technique
+* Attempt to estimate the expected out-of-sample errors of the models using cross-validation
+* Perform predictions on unseen test data
+
+## Initial Data Analysis
+
+We start by loading the data and taking a look at how many observations there are for each participant studies and each class of exercise that we will be predicting against:
+```{r, load_data, warning=FALSE, message=FALSE}
+main_data <- read_csv(file = "pml-training.csv")
+prediction_test <- read_csv(file = "pml-testing.csv")
+
+# convert classe to factor
+main_data$classe <- factor(main_data$classe)
+dim(main_data)
+
+# summarize "classe" target by user
+table(main_data$user_name, main_data$classe)
+```
+
+We have loaded a small file "pml-testing.csv" that consists of data on which we need to make a small number of predictions. We'll consider this separately to the main data, which we'll split into training, CV and testing sets.
+
+### Typical Distributions of Sensor Data
+Since most of our data consists of reading from accelerometer and gyro sensors, we should take a look at how this numerical (continuous) data is distributed. For example, is it approximately normal, or highly skewed with many sporadic outliers?
+
+```{r message=FALSE, warning=FALSE, cache=TRUE}
+# Arbitrarily pick a gyro, magnetic, accelerometer, and axis reading,
+# from belt, arm, forearm and dumbbell to cover the various types of readings:
+
+par(mfrow=c(2,2))
+hist(main_data$roll_belt, xlab="",main="a) Roll, Belt Sensor",col="khaki")
+hist(main_data$total_accel_arm, xlab="",main="b) Total Acceleration, Arm Sensor",col="lightpink")
+hist(main_data$gyros_dumbbell_x, xlab="",main="c) Gyro X Axis, Dumb-bell Sensor",col="lightblue")
+hist(main_data$magnet_forearm_y, xlab="", main="d) Magnet Y Axis, Forearm Sensor",col="lightgreen")
+```
+
+We see a mixture of distributions, from bimodal in a) to highly skewed in d). These highly "non-normal" distributions may affect linear regression classifiers more then e.g. decision tree classifiers, as many regressions assume that the "random error" or natural variance is normally distributed.
+
+### Cross Validation Approach
+The main data set consists of 19622 observations, with data for each class of exercise and each user fairly evenly split, as shown in the table above.  We will split this main data as follows:
+
+* 70% training/CV data
+* 30% testing data
+
+For the 70% training/CV data, we will use K-fold cross-validation, with K=4, so that each cross-validation set has severla hundred observations.Regarding the selection of K, in the words of someone wiser than me, K-fold cross-validation is "usually done with 10-fold cross validation, because it is good choice for the bias-variance trade-off (2-fold could cause models with high bias, Leave-One-Out CV can cause models with high variance/over-fitting)..."
+
+We will use the method="cv" cross-validation in Caret which will automatically apply the K-fold procedure when passed as a trainControl() object to the training function:
+
+```{r, split_data,warning=FALSE}
+set.seed(1977)
+inTrain <- createDataPartition(main_data$classe, p=0.7, list = FALSE)
+training <- main_data[inTrain,]
+testing <- main_data[-inTrain,]
+
+# K-fold CV will be done automatically by Caret on the training data (k=4)
+train_control<- trainControl(method="cv", number=4)
+```
+
+### Feature Selection
+The data has nearly 160 features which we can use to train our classifiers. This is very likely to be many more than are needed. To reduce this number, we'll start by looking at how many missing values each feature has:
+```{r echo=FALSE, missing_values, warning=FALSE}
+sapply(training, FUN=function(x) { sum(is.na(x))}) -> NAs_by_column
+
+names(NAs_by_column[NAs_by_column>0]) -> NA_cols
+
+cat("Sample of columns names with missing values:\n")
+head(NA_cols)
+
+cat("\nThere are ",length(NA_cols)," columns with missing data\n\n")
+
+cat("The average number of missing values per column is ",mean(NAs_by_column[NAs_by_column>0]))
+```
+
+So we have 100 columns that have 13444 out of 13737 missing values. It is safe to say that we can remove these from our models, leaving a more manageable set of 60 or so features.
+
+The vast majority of features are numeric (i.e. accelerometer and gyro readings), with only a handful of character classes that may need converting to factors. 
+
+
+
+### Ignoring Timestamps and 'window' Features
+Columns 3 to 5 are time-stamp columns `r names(training[3:5])` which we don't want to train on, as the time-stamps are irrelevant and misleading when we come to use the model *at some other future time*!
+
+Columns 6 and 7 ('new_window' and 'num_window') seem to be unrelated to the measurement data, as 'num_window' just seems to be a counting variable, so we shall omit these two columns as well.
+
+## Model Selection
+We'll take the approach of using a single model using a random forest classifier (method = "rf" in R), using the "classe" feature as the target variable for prediction.
+```{r, cache=TRUE, model_selection, warning=FALSE, message=FALSE}
+# Remove features with missing values:
+training %>% select(-all_of(NA_cols)) -> training_no_NA
+
+# Check no missing values
+sum(is.na(training_no_NA))
+
+# train the models (this may take a few minutes...)
+system.time(rfmodel_1 <- train(classe ~ ., 
+                 data=training_no_NA[,-c(3:7)],
+                 trControl=train_control, 
+                 method="rf"))
+```
+Our training took about four minutes.
+
+### Assess the Model on the Test Data
+Now we'll test the model on the 30% test set that we created, and get an assessment of out-of-sample errors:
+
+```{r, assess, warning=FALSE}
+rfpred <- predict(rfmodel_1, testing)
+
+confusionMatrix(rfpred, testing$classe)
+```
+Amazingly, the Random Forest classifier has performed with 100% accuracy on the 5,885 observations in the test set! This gives us confidence that the predictor will perform well on any new unseen data.
+
+### Feature Reduction Using PCA
+In the model above, we trained the classifier on just under 60 features (i.e.dimensions), but many of these are likely to show very high correlation with each other and the target, so we'll use Principal Components Analysis to reduce this number of dimensions. PCA in Caret forces data be centered and scaled, so we don't need to explicitly do this.
+
+We'll also remove features that have very little variation by using Caret's "nzv", or 'near zero variance' pre-processing function as well.
+```{r, model_with_PCA, cache=TRUE, warning=FALSE}
+# pre-processing data frame - omitting time column 3:5, and target column 60, "classe":
+df <- training_no_NA[,-c(3:5,60)]
+
+# PCA object to use on train AND test sets with same axes rotations
+#pca <- prcomp(df, scale = T, center = T)
+
+myPreProc <- preProcess(df,method=c("pca","nzv"))
+
+# View pre-processing stage:
+myPreProc
+
+# Perform pre-processing:
+
+preTrain <- predict(myPreProc, df)
+
+# Train model on pre-processed data:
+system.time(rfmodel_pca <- train(classe ~ ., 
+                 data=cbind(classe=training_no_NA$classe,preTrain),
+                 trControl=train_control, 
+                 method="rf"
+                 )
+)
+ 
+```
+
+We see that PCA has roughly halved the number of features required, whilst still capturing 95% of the variance in the data. The hope was that this will help reduce the training time of our chosen classifier, but surprisingly, we see it actually increased from 244 to 262 seconds!
+
+### Re-assess Model with PCA on the Test data
+```{r, assess2, warning=FALSE}
+# Perform same PCA process on testing data before predicting on it
+preproc_testing <- predict(myPreProc, testing)
+
+rfpred_pca <- predict(rfmodel_pca, preproc_testing)
+
+confusionMatrix(rfpred_pca, preproc_testing$classe)
+```
+
+Perhaps not unsurprisingly, the classifier makes a few errors on the test set, reducing accuracy from 100% to 98.81%, as PCA does sacrifice some "detail" or variation in the data as the cost of reducing the number of dimensions. 
+
+## Comparison with (Simpler) Decision Tree
+Above we have used a Random Forest classifier with and without PCA. Random Forest classifiers are good at handling non-linearities in data. For interest, we'll do a quick comparison with a basic decision tree classifier using method="rpart":
+```{r, ridge, cache=TRUE, warning=FALSE}
+# train the models (this may take a few minutes...)
+system.time(rfmodel_rpart <- train(classe ~ ., 
+                 data=training_no_NA[,-c(3:7)],
+                 trControl=train_control, 
+                method = "rpart"))
+```
+```{r, svm_accuracy, warning=FALSE}
+rfpred <- predict(rfmodel_rpart, testing)
+c <- confusionMatrix(rfpred, testing$classe)
+c$overall
+```
+We see this trains *very* quickly, in a couple of seconds, but has a **terrible** accuracy of about 66%. We will not use a basic model such as this for our final model.
+
+## Final Model Choice & Prediction
+In light of the training time increase and loss in accuracy, we'll pick the initial Random Forest model without PCA as our final model to use on the "prediction test" set for this assignment.
+
+## Prediction on 20 Test Cases
+In the file "pml-testing.csv", we are provided 20 test cases on which to make predictions. We'll use our 'rfmodel_1' to make the predictions.
+
+```{r}
+rfpred <- predict(rfmodel_1, prediction_test)
+rfpred
+```
+Our classifier thinks all 20 exercises in the final prediction test set are of Class A, i.e. exercise performed correctly.
+
+Save these predictions to file:
+```{r}
+write_csv(x=data.frame(Prediction=rfpred),path="final_predictions.csv")
+```
+
+<center>**END OF REPORT**</center>
