@@ -1,8 +1,10 @@
 # PracticalMachineLearning
 Final Assignment Week 4: Dumb-bell exercise prediction.
 
-Please browse to:
+![](attention.png)
 
-[http:\\threefeetdeep.github.io\PracticalMachineLearning](http:\\threefeetdeep.github.io\PracticalMachineLearning)
+**Please browse to:**
 
-to view the html notebook for this assignment
+[http://threefeetdeep.github.io/PracticalMachineLearning/PredictionAssignment](http://threefeetdeep.github.io/PracticalMachineLearning/PredictionAssignment)
+
+**to view the html notebook for this assignment**
